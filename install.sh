@@ -113,94 +113,17 @@ compile() {
     if [ "$(uname)" = "OpenBSD" ]
     then
         doas cmake --install .
-        exit 0
     else
         if can_use_sudo
         then
             sudo cmake --install .  || { unsupported "$(uname) on $(uname -m)"; exit 1 ; }
             print_success "CB is installed at /usr/local/bin, you should be ready to go!"
-            exit 0
         else
             mkdir -p "$HOME/.local"
             cmake --install . --install-prefix="$HOME/.local" || { unsupported "$(uname) on $(uname -m)" ; exit 1 ; }
             print_success "CB is installed at $HOME/.local/bin, be sure to add that to your PATH."
-            exit 0
         fi
     fi
-}
-
-download_and_install() {
-  download_link="$1"
-  os_type="$2"
-  set +e
-
-  if can_use_sudo
-  then
-    requires_sudo=true
-    install_path="/usr/local"
-    sudo mkdir -p "$install_path/bin" "$install_path/lib" || return 1
-  else
-    requires_sudo=false
-    install_path="$HOME/.local"
-    mkdir -p "$install_path/bin" "$install_path/lib" || return 1
-  fi
-
-  case "$os_type" in
-    "Linux")
-      curl -SL "$download_link" -o "clipboard.zip" || return 1
-      ;;
-    "NetBSD")
-      if command -v ftp >/dev/null 2>&1
-      then
-        ftp -o "clipboard.zip" "$download_link" || return 1
-      elif command -v curl >/dev/null 2>&1
-      then
-        curl -SsLl "$download_link" -o "clipboard.zip" || return 1
-      else
-        return 1
-      fi
-      ;;
-    "Darwin" | "FreeBSD" | "OpenBSD")
-      curl -SsLl "$download_link" -o "clipboard.zip" || return 1
-      ;;
-    *) return 1 ;;
-  esac
-
-  unzip "clipboard.zip" || return 1
-  rm "clipboard.zip" || return 1
-
-  if [ "$os_type" = "Darwin" ] || [ "$os_type" = "FreeBSD" ]
-  then
-    if [ "$requires_sudo" = true ] 
-    then
-      sudo mv bin/cb "$install_path/bin/cb" || return 1
-      sudo mv lib/libgui.a "$install_path/lib/libgui.a" || return 1
-      sudo chmod +x "$install_path/bin/cb" || return 1
-    else
-      mv bin/cb "$install_path/bin/cb" || return 1
-      mv lib/libgui.a "$install_path/lib/libgui.a" || return 1
-      chmod +x "$install_path/bin/cb" || return 1
-    fi
-  else
-
- if [ "$requires_sudo" = true ]
-    then
-      sudo mv bin/cb "$install_path/bin/cb" || return 1
-      [ -f "lib/libgui.a" ] && sudo mv "lib/libgui.a" "$install_path/lib/libgui.a"
-      [ -f "lib/libcbx11.so" ] && sudo mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
-      [ -f "lib/libcbwayland.so" ] && sudo mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
-      sudo chmod +x "$install_path/bin/cb" || return 1
-    else
-      mv bin/cb "$install_path/bin/cb" || return 1
-      [ -f "lib/libgui.a" ] && mv "lib/libgui.a" "$install_path/lib/libgui.a"
-      [ -f "lib/libcbx11.so" ] && mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
-      [ -f "lib/libcbwayland.so" ] && mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
-      chmod +x "$install_path/bin/cb" || return 1
-    fi  
-  fi
-
-  set -e
-  return 0
 }
 
 # Start installation process
@@ -295,6 +218,19 @@ print_success "Attempting to download release zip file for architecture..."
 tmp_dir=$(mktemp -d -t cb-XXXXXXXXXX)
 cd "$tmp_dir" || exit 1
 
+if can_use_sudo
+then
+    requires_sudo=true
+    install_path="/usr/local"
+    sudo mkdir -p "$install_path/bin"
+    sudo mkdir -p "$install_path/lib"
+else
+    requires_sudo=false
+    install_path="$HOME/.local"
+    mkdir -p "$install_path/bin"
+    mkdir -p "$install_path/lib"
+fi
+
 download_link="skip"
 
 case "$(uname)" in
@@ -339,16 +275,53 @@ case "$(uname)" in
     print_error "No supported release download available for $(uname):$(uname -m)"
     print_success "Attempting compile with CMake..."
     compile
-    exit
+    verify
     ;;
 esac
 
+
+
 if [ "$download_link" != "skip" ]
 then
-  download_and_install "$download_link" "$(uname)" 
-fi
+  if [ "$(uname)" = "Linux" ]
+  then
+        curl -SL $download_link -o clipboard-linux.zip
+        unzip clipboard-linux.zip
+        rm clipboard-linux.zip
+        set +e
+         if [ "$requires_sudo" = true ]
+          then
+            sudo mv bin/cb "$install_path/bin/cb" 
+            [ -f "lib/libcbx11.so" ] && sudo mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
+            [ -f "lib/libcbwayland.so" ] && sudo mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
+            sudo chmod +x "$install_path/bin/cb"
+          else
+            mv bin/cb "$install_path/bin/cb"
+            [ -f "lib/libcbx11.so" ] && mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
+            [ -f "lib/libcbwayland.so" ] && mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
+            chmod +x "$install_path/bin/cb"
+          fi  
+        fi
+        set -e
+  elif [ "$(uname)" = "Darwin" ]
+  then
+      unzip clipboard-macos.zip
+      rm clipboard-macos.zip
+      sudo mv bin/cb "$install_path/bin/cb"
+      chmod +x "$install_path/bin/cb"
+  elif [ "$(uname)" = "OpenBSD" ]
+  then
+      unsupported "OpenBSD"
+      exit 0
+  elif [ "$(uname)" = "NetBSD" ]
+  then
+      unsupported "NetBSD"
+      exit 0
+  else
+    compile
+  fi
 
-cd ..
-rm -rf "$tmp_dir"
+  cd ..
+  rm -rf "$tmp_dir"
 
-verify
+  verify

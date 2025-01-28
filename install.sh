@@ -11,6 +11,7 @@ RESET="\033[0m"
 
 print_success() { printf "%b\n" "${GREEN}$1${RESET}"; }
 print_error() { printf "%b\n" "${RED}$1${RESET}"; }
+print_warning() { printf "%b\n" "${YELLOW}$1${RESET}"; }
 
 
 unsupported() {
@@ -30,21 +31,6 @@ verify_flatpak() {
     exit 1
 }
 
-verify() {
-    if command -v cb >/dev/null 2>&1
-    then
-        if ! cb >/dev/null 2>&1
-        then
-            print_error "Error with the runtime of cb, but able to execute." 
-            exit 1
-        fi
-        print_success "Clipboard installed successfully!"
-        exit 0
-    fi
-    print_error "Clipboard is not able to be called, check that /usr/local/bin is accessible by PATH."
-    exit 1
-}
-
 can_use_sudo() {
     prompt=$(sudo -nv 2>&1)
     if sudo -nv >/dev/null 2>&1
@@ -58,6 +44,35 @@ can_use_sudo() {
     return 1       # Sudo not available
 }
 
+if can_use_sudo
+then
+    requires_sudo=true
+    install_path="/usr/local"
+    sudo mkdir -p "$install_path/bin"
+    sudo mkdir -p "$install_path/lib"
+else
+    requires_sudo=false
+    install_path="$HOME/.local"
+    mkdir -p "$install_path/bin"
+    mkdir -p "$install_path/lib"
+fi
+
+verify() {
+  cd ..
+  rm -rf "$tmp_dir"
+  if command -v cb >/dev/null 2>&1
+  then
+      if ! cb >/dev/null 2>&1
+      then
+          print_error "Error with the runtime of cb, but able to execute." 
+          exit 1
+      fi
+      print_success "CB is installed at $install_path/bin, be sure its on your PATH."
+      exit 0
+  fi
+  print_error "CB failed to install on platform $(uname):$(uname -m)"
+  exit 1
+}
 
 # has_header() {
 #     header="$1"
@@ -116,14 +131,21 @@ compile() {
     else
         if can_use_sudo
         then
-            sudo cmake --install .  || { unsupported "$(uname) on $(uname -m)"; exit 1 ; }
-            print_success "CB is installed at /usr/local/bin, you should be ready to go!"
+          sudo cmake --install . 
+          verify
         else
-            mkdir -p "$HOME/.local"
-            cmake --install . --install-prefix="$HOME/.local" || { unsupported "$(uname) on $(uname -m)" ; exit 1 ; }
-            print_success "CB is installed at $HOME/.local/bin, be sure to add that to your PATH."
+          mkdir -p "$HOME/.local"
+          cmake --install . --prefix="$HOME/.local"
+          verify
         fi
     fi
+}
+
+compile_and_verify(){
+  print_error "No supported release download available for $(uname):$(uname -m)"
+  print_success "Attempting compile with CMake..."
+  compile
+  verify
 }
 
 # Start installation process
@@ -211,33 +233,19 @@ then
 fi
 
 
-
 print_error "No supported package manager found."
 print_success "Attempting to download release zip file for architecture..."
 
 tmp_dir=$(mktemp -d -t cb-XXXXXXXXXX)
 cd "$tmp_dir" || exit 1
 
-if can_use_sudo
-then
-    requires_sudo=true
-    install_path="/usr/local"
-    sudo mkdir -p "$install_path/bin"
-    sudo mkdir -p "$install_path/lib"
-else
-    requires_sudo=false
-    install_path="$HOME/.local"
-    mkdir -p "$install_path/bin"
-    mkdir -p "$install_path/lib"
-fi
-
 download_link="skip"
 
 case "$(uname)" in
   "Linux")
     case "$(uname -m)" in
-      "x86_64")  download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-amd64.zip" ;;
-      "aarch64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-arm64.zip" ;;
+      "x86_64"  | "amd64")  download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-amd64.zip" ;;
+      "aarch64" | "arm64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-arm64.zip" ;;
       "riscv64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-riscv64.zip" ;;
       "i386")    download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-i386.zip" ;;
       "ppc64le") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-linux-ppc64le.zip" ;;
@@ -253,75 +261,55 @@ case "$(uname)" in
     ;;
    "FreeBSD")
       case "$(uname -m)" in
-        "x86_64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-freebsd-amd64.zip" ;;
-               *) print_error "No supported release download available for $(uname):$(uname -m)"
-                  print_success "Attempting compile with CMake..."
-                  compile
-                  verify
-                  ;;
+        "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-freebsd-amd64.zip" ;;
+                *) compile_and_verify 
+      ;;
       esac
       ;;
     "NetBSD")
        case "$(uname -m)" in
-        "x86_64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-netbsd-amd64.zip" ;;
-               *) print_error "No supported release download available for $(uname):$(uname -m)"
-                  print_success "Attempting compile with CMake..."
-                  compile
-                  verify
+        "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-netbsd-amd64.zip" ;;
+               *) compile_and_verify 
                   ;; 
        esac
        ;;
-  *)
-    print_error "No supported release download available for $(uname):$(uname -m)"
-    print_success "Attempting compile with CMake..."
-    compile
-    verify
+  *) compile_and_verify 
     ;;
 esac
-
-
 
 if [ "$download_link" != "skip" ]
 then
   if [ "$(uname)" = "Linux" ]
   then
-        curl -SL $download_link -o clipboard-linux.zip
-        unzip clipboard-linux.zip
-        rm clipboard-linux.zip
-        set +e
-         if [ "$requires_sudo" = true ]
-          then
-            sudo mv bin/cb "$install_path/bin/cb" 
-            [ -f "lib/libcbx11.so" ] && sudo mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
-            [ -f "lib/libcbwayland.so" ] && sudo mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
-            sudo chmod +x "$install_path/bin/cb"
-          else
-            mv bin/cb "$install_path/bin/cb"
-            [ -f "lib/libcbx11.so" ] && mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
-            [ -f "lib/libcbwayland.so" ] && mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
-            chmod +x "$install_path/bin/cb"
-          fi  
-        fi
-        set -e
+    curl -SsLl $download_link -o clipboard-linux.zip
+    unzip clipboard-linux.zip
+    rm clipboard-linux.zip
+    set +e
+     if [ "$requires_sudo" = true ]
+      then
+        sudo mv bin/cb "$install_path/bin/cb" 
+        [ -f "lib/libcbx11.so" ] && sudo mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
+        [ -f "lib/libcbwayland.so" ] && sudo mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
+        sudo chmod +x "$install_path/bin/cb"
+      else
+        mv bin/cb "$install_path/bin/cb"
+        [ -f "lib/libcbx11.so" ] && mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
+        [ -f "lib/libcbwayland.so" ] && mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
+        chmod +x "$install_path/bin/cb"
+      fi  
+    set -e
+  fi
   elif [ "$(uname)" = "Darwin" ]
-  then
-      unzip clipboard-macos.zip
-      rm clipboard-macos.zip
-      sudo mv bin/cb "$install_path/bin/cb"
-      chmod +x "$install_path/bin/cb"
-  elif [ "$(uname)" = "OpenBSD" ]
-  then
-      unsupported "OpenBSD"
-      exit 0
+  then 
+    curl -SsLl $download_link -o clipboard-mac.zip
+    unzip clipboard-macos.zip
+    rm clipboard-macos.zip
+    sudo mv bin/cb "$install_path/bin/cb"
+    chmod +x "$install_path/bin/cb"
   elif [ "$(uname)" = "NetBSD" ]
   then
-      unsupported "NetBSD"
-      exit 0
-  else
-    compile
-  fi
-
-  cd ..
-  rm -rf "$tmp_dir"
-
-  verify
+    print_warning "Release is at $download_link, download and move libs and bin/cb somewhere sensible." 
+    exit 0
+else
+  compile_and_verify
+fi

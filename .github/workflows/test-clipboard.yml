@@ -124,7 +124,7 @@ jobs:
                       
             apt-get update
             apt-get upgrade -y
-            apt-get install -y $PACKAGES xvfb sway xclip cmake wl-clipboard squeekboard sudo pkg-config cmake-data libasound-dev liburing-dev
+            apt-get install -y $PACKAGES xvfb sway xclip cmake wl-clipboard squeekboard sudo pkg-config cmake-data libasound-dev liburing-dev openssl libssl3 libssl-dev
 
           run: |
             NO_X11=1

@@ -57,6 +57,8 @@ else
     mkdir -p "$install_path/lib"
 fi
 
+tmp_dir=$(mktemp -d -t cb-XXXXXXXXXX)
+
 verify() {
   cd ..
   rm -rf "$tmp_dir"
@@ -236,7 +238,6 @@ fi
 print_error "No supported package manager found."
 print_success "Attempting to download release zip file for architecture..."
 
-tmp_dir=$(mktemp -d -t cb-XXXXXXXXXX)
 cd "$tmp_dir" || exit 1
 
 download_link="skip"

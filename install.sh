@@ -238,7 +238,7 @@ fi
 print_error "No supported package manager found."
 print_success "Attempting to download release zip file for architecture..."
 
-cd "$tmp_dir" || exit 1
+cd "$tmp_dir"
 
 download_link="skip"
 

@@ -177,10 +177,12 @@ jobs:
 
       - name: Run a script
         run: |
+          mkdir -p $HOME/.local
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Debug
           cmake --build . --config Debug --parallel 2
-          cmake --install .
+          cmake --install . --prefix="$HOME/.local"
+          export PATH="$HOME/.local/bin:$PATH"
           export CLIPBOARD_TMPDIR=$TMPDIR
           bash ../src/tests/suite.sh
           find . -name '*.gcda' | xargs gcov

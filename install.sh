@@ -304,16 +304,14 @@ then
       curl -SsLl $download_link -o clipboard-freebsd.zip
       unzip clipboard-freebsd.zip
       rm clipboard-freebsd.zip
-      sudo mv bin/cb "$install_path/bin/cb"
-      chmod +x "$install_path/bin/cb"
     if [ "$requires_sudo" = true ]
     then
-        sudo mv bin/cb "$install_path/bin/cb" 
+        [ -f "bin/cb" ] &&  sudo mv bin/cb "$install_path/bin/cb" 
         [ -f "lib/libcbx11.so" ] && sudo mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
         [ -f "lib/libcbwayland.so" ] && sudo mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
         sudo chmod +x "$install_path/bin/cb"
     else
-        mv bin/cb "$install_path/bin/cb"
+        [ -f "bin/cb" ] && mv bin/cb "$install_path/bin/cb"
         [ -f "lib/libcbx11.so" ] && mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
         [ -f "lib/libcbwayland.so" ] && mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
         chmod +x "$install_path/bin/cb"

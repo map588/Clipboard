@@ -244,7 +244,7 @@ case "$(uname)" in
    "FreeBSD")
       case "$(uname -m)" in
        # FreeBSD compiles but does not work as copied from release.
-       # "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-freebsd-amd64.zip" ;;
+    "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-freebsd-amd64.zip" ;;
                 *) download_link="skip" ;;
       esac
       ;;
@@ -298,8 +298,27 @@ then
     print_success "Release is at $download_link, download and move libs and bin/cb somewhere sensible."
     unsupported "$(uname)"
     exit 0
-  else
-    compile_and_verify
+  elif [ "$(uname)" = "FreeBSD" ]
+  then
+      make_tmpdir
+      curl -SsLl $download_link -o clipboard-freebsd.zip
+      unzip clipboard-freebsd.zip
+      rm clipboard-freebsd.zip
+      sudo mv bin/cb "$install_path/bin/cb"
+      chmod +x "$install_path/bin/cb"
+    if [ "$requires_sudo" = true ]
+    then
+        sudo mv bin/cb "$install_path/bin/cb" 
+        [ -f "lib/libcbx11.so" ] && sudo mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
+        [ -f "lib/libcbwayland.so" ] && sudo mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
+        sudo chmod +x "$install_path/bin/cb"
+    else
+        mv bin/cb "$install_path/bin/cb"
+        [ -f "lib/libcbx11.so" ] && mv "lib/libcbx11.so" "$install_path/lib/libcbx11.so"
+        [ -f "lib/libcbwayland.so" ] && mv "lib/libcbwayland.so" "$install_path/lib/libcbwayland.so"
+        chmod +x "$install_path/bin/cb"
+    fi
+    rm_tmpdir
   fi
 else
   compile_and_verify

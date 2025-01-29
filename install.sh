@@ -57,11 +57,8 @@ else
     mkdir -p "$install_path/lib"
 fi
 
-tmp_dir=$(mktemp -d -t cb-XXXXXXXXXX)
 
 verify() {
-  cd ..
-  rm -rf "$tmp_dir"
   if command -v cb >/dev/null 2>&1
   then
       if ! cb >/dev/null 2>&1
@@ -76,30 +73,21 @@ verify() {
   exit 1
 }
 
-# has_header() {
-#     header="$1"
-#     # See if pre-processor exists 
-#     if command -v cpp >/dev/null 2>&1
-#     then
-#         echo "#include <${header}>" | cpp -H -o /dev/null >/dev/null 2>&1
-#         return
-#     fi
-#     # Try gcc if available
-#     if command -v gcc >/dev/null 2>&1
-#     then
-#         echo "#include <${header}>" | gcc -E - >/dev/null 2>&1
-#         return
-#     fi
-#     # Try clang if available
-#     if command -v clang >/dev/null 2>&1
-#     then
-#         echo "#include <${header}>" | clang -E - >/dev/null 2>&1
-#         return
-#     fi
-#     # No known compiler found
-#     false
-#     return
-# }
+tmp_dir=""
+
+make_tmpdir(){
+  tmp_dir=$(mktemp -d -t cb-XXXXXXXXXX)
+  cd "$tmp_dir"
+  print_success "In temporary directory: $(pwd)"
+}
+
+rm_tmpdir(){
+ if [ -f "$tmp_dir" ]
+ then
+   cd "$tmp_dir/.."
+   rm -rf "$tmp_dir"
+ fi
+}
 
 has_apt(){
  command -v apt-get >/dev/null 2>&1
@@ -127,19 +115,12 @@ compile() {
     cmake ..
     cmake --build .
 
-    if [ "$(uname)" = "OpenBSD" ]
+    if [ "$requires_sudo" = "true" ]
     then
-        doas cmake --install .
+      sudo cmake --install . 
     else
-        if can_use_sudo
-        then
-          sudo cmake --install . 
-          verify
-        else
-          mkdir -p "$HOME/.local"
-          cmake --install . --prefix="$HOME/.local"
-          verify
-        fi
+      mkdir -p "$HOME/.local"
+      cmake --install . --prefix="$HOME/.local"
     fi
 }
 
@@ -156,7 +137,7 @@ print_success "Searching for a package manager..."
 # Try package managers first
 if command -v apk >/dev/null 2>&1
 then
-    if can_use_sudo
+    if [ "$requires_sudo" = "true" ]
     then
         sudo apk add clipboard
         verify
@@ -165,7 +146,7 @@ fi
 
 if command -v yay >/dev/null 2>&1
 then
-    if can_use_sudo
+    if [ "$requires_sudo" = "true" ]
     then
         sudo yay -S clipboard
         verify
@@ -174,7 +155,7 @@ fi
 
 if command -v emerge >/dev/null 2>&1
 then
-    if can_use_sudo
+    if [ "$requires_sudo" = "true" ]
     then
         sudo emerge -av app-misc/clipboard
         verify
@@ -189,7 +170,7 @@ fi
 
 if command -v flatpak >/dev/null 2>&1
 then
-    if can_use_sudo
+    if [ "$requires_sudo" = "true" ]
     then
         sudo flatpak install flathub "$flatpak_package" -y
     else
@@ -200,7 +181,7 @@ fi
 
 # if command -v snap >/dev/null 2>&1
 # then
-#     if can_use_sudo
+#     if [ "$requires_sudo" = "true" ]
 #     then
 #         sudo snap install clipboard
 #         verify
@@ -227,7 +208,7 @@ fi
 
 if command -v xbps-install >/dev/null 2>&1
 then
-    if can_use_sudo
+    if [ "$requires_sudo" = "true" ]
     then
         sudo xbps-install -S clipboard
         verify
@@ -238,7 +219,7 @@ fi
 print_error "No supported package manager found."
 print_success "Attempting to download release zip file for architecture..."
 
-cd "$tmp_dir"
+
 
 download_link="skip"
 
@@ -262,26 +243,29 @@ case "$(uname)" in
     ;;
    "FreeBSD")
       case "$(uname -m)" in
-        "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-freebsd-amd64.zip" ;;
-                *) compile_and_verify 
-      ;;
+       # FreeBSD compiles but does not work as copied from release.
+       # "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-freebsd-amd64.zip" ;;
+                *) download_link="skip" ;;
       esac
       ;;
     "NetBSD")
        case "$(uname -m)" in
         "x86_64" | "amd64") download_link="https://github.com/Slackadays/Clipboard/releases/download/0.10.0/clipboard-netbsd-amd64.zip" ;;
-               *) compile_and_verify 
-                  ;; 
+                *) download_link="skip" ;; 
        esac
        ;;
-  *) compile_and_verify 
-    ;;
+     "OpenBSD")
+        unsupported "$(uname):$(uname -m)"
+        exit 0
+       ;;
+  *) rm_tmpdir; compile_and_verify ;;
 esac
 
 if [ "$download_link" != "skip" ]
 then
   if [ "$(uname)" = "Linux" ]
   then
+    make_tmpdir
     curl -SsLl $download_link -o clipboard-linux.zip
     unzip clipboard-linux.zip
     rm clipboard-linux.zip
@@ -299,18 +283,26 @@ then
         chmod +x "$install_path/bin/cb"
       fi  
     set -e
-  fi
+    rm_tmpdir
   elif [ "$(uname)" = "Darwin" ]
   then 
+    make_tmpdir
     curl -SsLl $download_link -o clipboard-mac.zip
     unzip clipboard-macos.zip
     rm clipboard-macos.zip
     sudo mv bin/cb "$install_path/bin/cb"
     chmod +x "$install_path/bin/cb"
+    rm_tmpdir
   elif [ "$(uname)" = "NetBSD" ]
   then
-    print_warning "Release is at $download_link, download and move libs and bin/cb somewhere sensible." 
+    print_success "Release is at $download_link, download and move libs and bin/cb somewhere sensible."
+    unsupported "$(uname)"
     exit 0
+  else
+    compile_and_verify
+  fi
 else
   compile_and_verify
 fi
+
+ 
